@@ -13,4 +13,6 @@ icon = "cool-x"
 compress = true
 
 [dependencies]
+bytemuck = { version = "1.24.0", features = ["derive"] }
 vexide = "0.7.0"
+
