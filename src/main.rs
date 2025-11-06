@@ -43,9 +43,9 @@ fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
             .iter()
             .all(|x| rx_port.read_byte() == Some(*x))
         {
-            let mut packet = [0u8; core::mem::size_of::<MotorPacket>()];
-            if rx_port.read_exact(&mut packet).is_ok() {
-                return Some(*from_bytes(&packet));
+            let mut packet = MotorPacket::zeroed();
+            if rx_port.read_exact(bytes_of_mut(&mut packet)).is_ok() {
+                return Some(packet);
             }
         }
     }
