@@ -3,7 +3,7 @@
 
 use core::time::Duration;
 
-use bytemuck::{Pod, Zeroable, bytes_of, from_bytes};
+use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
 use vexide::{io::Result, prelude::*, time};
 
 const BAUD_RATE: u32 = 115200;
@@ -100,28 +100,29 @@ async fn main(peripherals: Peripherals) {
                 m.set_voltage(power_packet.back_right * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
                     .expect("Motor set broke");
             });
+        }
 
-            let encoder_packet = MotorPacket {
-                front_left: front_lefts[0]
-                    .position()
-                    .expect("Motor position broke")
-                    .as_degrees(),
-                front_right: front_rights[0]
-                    .position()
-                    .expect("Motor position broke")
-                    .as_degrees(),
-                back_left: back_lefts[0]
-                    .position()
-                    .expect("Motor position broke")
-                    .as_degrees(),
-                back_right: back_rights[0]
-                    .position()
-                    .expect("Motor position broke")
-                    .as_degrees(),
-            };
-            if send_encoder_packet(&mut tx_serial, &encoder_packet).is_ok() {
-                println!("Sent encoder packet: {:?}", encoder_packet);
-            }
+        let encoder_packet = MotorPacket {
+            front_left: front_lefts[0]
+                .position()
+                .expect("Motor position broke")
+                .as_degrees(),
+            front_right: front_rights[0]
+                .position()
+                .expect("Motor position broke")
+                .as_degrees(),
+            back_left: back_lefts[0]
+                .position()
+                .expect("Motor position broke")
+                .as_degrees(),
+            back_right: back_rights[0]
+                .position()
+                .expect("Motor position broke")
+                .as_degrees(),
+        };
+
+        if send_encoder_packet(&mut tx_serial, &encoder_packet).is_ok() {
+            println!("Sent encoder packet: {:?}", encoder_packet);
         }
     }
 }
