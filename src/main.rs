@@ -1,10 +1,8 @@
-#![no_main]
-#![no_std]
-
 use core::time::Duration;
 
 use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
-use vexide::{io::Result, prelude::*, time};
+use vexide::{prelude::*};
+use std::{io::{Read, Write}, time::Instant};
 
 const BAUD_RATE: u32 = 115200;
 const MOTOR_PACKET_MAGIC: u16 = 0xFEFA;
@@ -35,8 +33,8 @@ unsafe impl Zeroable for MotorPacket {
 fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_secs(1);
 
-    let start_time = time::Instant::now();
-    while time::Instant::now().duration_since(start_time) < TIMEOUT {
+    let start_time = Instant::now();
+    while Instant::now().duration_since(start_time) < TIMEOUT {
         // Check for the whole magic, byte by byte
         if MOTOR_PACKET_MAGIC
             .to_le_bytes()
@@ -53,7 +51,7 @@ fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
     None
 }
 
-fn send_encoder_packet(tx_port: &mut SerialPort, packet: &MotorPacket) -> Result<()> {
+fn send_encoder_packet(tx_port: &mut SerialPort, packet: &MotorPacket) -> Result<(), std::io::Error> {
     tx_port.write_all(&ENCODER_PACKET_MAGIC.to_le_bytes())?;
     tx_port.write_all(bytes_of(packet))?;
 
@@ -62,23 +60,23 @@ fn send_encoder_packet(tx_port: &mut SerialPort, packet: &MotorPacket) -> Result
 
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
-    let mut rx_serial = SerialPort::open(peripherals.port_1, BAUD_RATE).await;
-    let mut tx_serial = SerialPort::open(peripherals.port_2, BAUD_RATE).await;
+    let mut rx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await;
+    let mut tx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await;
     let mut front_lefts: [Motor; _] = [
-        Motor::new(peripherals.port_3, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_4, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_2, Gearset::Green, Direction::Reverse),
     ];
     let mut front_rights: [Motor; 2] = [
-        Motor::new(peripherals.port_5, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_6, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_3, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_4, Gearset::Green, Direction::Reverse),
     ];
     let mut back_lefts: [Motor; 2] = [
-        Motor::new(peripherals.port_7, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_8, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_11, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_12, Gearset::Green, Direction::Reverse),
     ];
     let mut back_rights: [Motor; 2] = [
-        Motor::new(peripherals.port_9, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_10, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_13, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_14, Gearset::Green, Direction::Reverse),
     ];
 
     loop {
