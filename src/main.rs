@@ -15,24 +15,25 @@ const MOTOR_VOLTAGE_MAX: f64 = 12.0;
 #[repr(C)]
 struct MotorPacket {
     front_left: f64,
-    front_right: f64,
     back_left: f64,
     back_right: f64,
+    front_right: f64,
 }
 
 unsafe impl Zeroable for MotorPacket {
     fn zeroed() -> Self {
         MotorPacket {
             front_left: 0.,
-            front_right: 0.,
             back_left: 0.,
             back_right: 0.,
+            front_right: 0.,
         }
     }
 }
 
 fn get_power_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_secs(1);
+    println!("getting packet...");
 
     let start_time = Instant::now();
     while Instant::now().duration_since(start_time) < TIMEOUT {
@@ -43,6 +44,7 @@ fn get_power_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
             .all(|x| rx_port.bytes().next().transpose().unwrap() == Some(*x) )
         {
             let mut packet = MotorPacket::zeroed();
+            println!("read ROS packet: {:?}", packet);
             if rx_port.read_exact(bytes_of_mut(&mut packet)).is_ok() {
                 return Some(packet);
             }
