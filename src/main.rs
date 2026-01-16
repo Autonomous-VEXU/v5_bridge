@@ -103,24 +103,32 @@ async fn main(peripherals: Peripherals) {
         if let Some(motor_packet) = get_motor_packet(&mut std::io::stdin()) {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.front_left)).unwrap();
+                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.front_left));
             });
             front_rights.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.front_right)).unwrap();
+                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.front_right));
             });
             back_lefts.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.back_left)).unwrap();
+                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.back_left));
             });
             back_rights.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.back_right)).unwrap();
+                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.back_right));
             });
         }
 
         let encoder_packet = MotorPacket {
-            front_left: front_lefts[0].position().unwrap().as_degrees(),
-            front_right: front_rights[0].position().unwrap().as_degrees(),
-            back_left: back_lefts[0].position().unwrap().as_degrees(),
-            back_right: back_rights[0].position().unwrap().as_degrees(),
+            front_left: front_lefts[0]
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
+            front_right: front_rights[0]
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
+            back_left: back_lefts[0]
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
+            back_right: back_rights[0]
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
         };
 
         if send_encoder_packet(&mut std::io::stdout(), &encoder_packet).is_ok() {
