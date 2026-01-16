@@ -2,14 +2,13 @@ use core::time::Duration;
 
 use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
 use vexide::{prelude::*};
-use std::{io::{Read, Write}, time::Instant};
+use std::{f64::consts::PI, io::{Read, Write}, time::Instant};
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
 const MOTOR_PACKET_MAGIC: u16 = 0xFEFA;
 const ENCODER_PACKET_MAGIC: u16 = 0xF23B;
-const MOTOR_PACKET_VAL_MAX: f64 = 1.0;
-const MOTOR_VELOCITY_MAX: i32 = 12;
+const WHEEL_GEAR_RATIO: f64 = 26f64 / 22f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C)]
@@ -31,7 +30,7 @@ unsafe impl Zeroable for MotorPacket {
     }
 }
 
-fn get_power_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
+fn get_motor_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_secs(1);
     println!("getting packet...");
 
@@ -61,6 +60,18 @@ fn send_encoder_packet(tx_port: &mut impl Write, packet: &MotorPacket) -> Result
     Ok(())
 }
 
+fn packet_to_motor_rpm(packet_value: f64) -> i32 {
+    const RAD_PER_REV: f64 = 2 * PI;
+    const SEC_PER_MIN: f64 = 60f64;
+
+    let rev_per_sec = packet_value / RAD_PER_REV;  
+    let rev_per_min = rev_per_sec * SEC_PER_MIN;
+
+    let output_rpm = rev_per_sec * WHEEL_GEAR_RATIO;
+    output_rpm as _
+}
+
+
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
     // let mut rx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await;
@@ -83,42 +94,34 @@ async fn main(peripherals: Peripherals) {
     ];
 
     loop {
-        if let Some(power_packet) = get_power_packet(&mut std::io::stdin()) {
-            println!("Got power packet: {:?}", power_packet);
+        if let Some(motor_packet) = get_motor_packet(&mut std::io::stdin()) {
+            println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
-                m.set_velocity((power_packet.front_left / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
-                    .expect("Motor set broke");
+                m.set_velocity(packet_to_motor_rpm(motor_packet.front_left))?;
             });
             front_rights.iter_mut().for_each(|m| {
-                m.set_velocity((power_packet.front_right / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
-                    .expect("Motor set broke");
+                m.set_velocity(packet_to_motor_rpm(motor_packet.front_right))?;
             });
             back_lefts.iter_mut().for_each(|m| {
-                m.set_velocity((power_packet.back_left / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
-                    .expect("Motor set broke");
+                m.set_velocity(packet_to_motor_rpm(motor_packet.back_left))?;
             });
             back_rights.iter_mut().for_each(|m| {
-                m.set_velocity((power_packet.back_right / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
-                    .expect("Motor set broke");
+                m.set_velocity(packet_to_motor_rpm(motor_packet.back_right))?;
             });
         }
 
         let encoder_packet = MotorPacket {
             front_left: front_lefts[0]
-                .position()
-                .expect("Motor position broke")
+                .position()?
                 .as_degrees(),
             front_right: front_rights[0]
-                .position()
-                .expect("Motor position broke")
+                .position()?
                 .as_degrees(),
             back_left: back_lefts[0]
-                .position()
-                .expect("Motor position broke")
+                .position()?
                 .as_degrees(),
             back_right: back_rights[0]
-                .position()
-                .expect("Motor position broke")
+                .position()?
                 .as_degrees(),
         };
 
