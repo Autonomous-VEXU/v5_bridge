@@ -8,8 +8,8 @@ use std::{io::{Read, Write}, time::Instant};
 const BAUD_RATE: u32 = 115200;
 const MOTOR_PACKET_MAGIC: u16 = 0xFEFA;
 const ENCODER_PACKET_MAGIC: u16 = 0xF23B;
-const MOTOR_POWER_MAX: f64 = 1.0;
-const MOTOR_VOLTAGE_MAX: f64 = 12.0;
+const MOTOR_PACKET_VAL_MAX: f64 = 1.0;
+const MOTOR_VELOCITY_MAX: i32 = 12;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C)]
@@ -86,19 +86,19 @@ async fn main(peripherals: Peripherals) {
         if let Some(power_packet) = get_power_packet(&mut std::io::stdin()) {
             println!("Got power packet: {:?}", power_packet);
             front_lefts.iter_mut().for_each(|m| {
-                m.set_voltage(power_packet.front_left * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
+                m.set_velocity((power_packet.front_left / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
                     .expect("Motor set broke");
             });
             front_rights.iter_mut().for_each(|m| {
-                m.set_voltage(power_packet.front_right * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
+                m.set_velocity((power_packet.front_right / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
                     .expect("Motor set broke");
             });
             back_lefts.iter_mut().for_each(|m| {
-                m.set_voltage(power_packet.back_left * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
+                m.set_velocity((power_packet.back_left / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
                     .expect("Motor set broke");
             });
             back_rights.iter_mut().for_each(|m| {
-                m.set_voltage(power_packet.back_right * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
+                m.set_velocity((power_packet.back_right / MOTOR_PACKET_VAL_MAX) as i32 * MOTOR_VELOCITY_MAX)
                     .expect("Motor set broke");
             });
         }
