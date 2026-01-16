@@ -1,8 +1,12 @@
 use core::time::Duration;
+use std::{
+    f64::consts::PI,
+    io::{Read, Write},
+    time::Instant,
+};
 
 use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
-use vexide::{prelude::*};
-use std::{f64::consts::PI, io::{Read, Write}, time::Instant};
+use vexide::prelude::*;
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
@@ -40,7 +44,7 @@ fn get_motor_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
         if MOTOR_PACKET_MAGIC
             .to_le_bytes()
             .iter()
-            .all(|x| rx_port.bytes().next().transpose().unwrap() == Some(*x) )
+            .all(|x| rx_port.bytes().next().transpose().unwrap() == Some(*x))
         {
             let mut packet = MotorPacket::zeroed();
             println!("read ROS packet: {:?}", packet);
@@ -53,7 +57,10 @@ fn get_motor_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
     None
 }
 
-fn send_encoder_packet(tx_port: &mut impl Write, packet: &MotorPacket) -> Result<(), std::io::Error> {
+fn send_encoder_packet(
+    tx_port: &mut impl Write,
+    packet: &MotorPacket,
+) -> Result<(), std::io::Error> {
     tx_port.write_all(&ENCODER_PACKET_MAGIC.to_le_bytes())?;
     tx_port.write_all(bytes_of(packet))?;
 
@@ -61,16 +68,15 @@ fn send_encoder_packet(tx_port: &mut impl Write, packet: &MotorPacket) -> Result
 }
 
 fn packet_to_motor_rpm(packet_value: f64) -> i32 {
-    const RAD_PER_REV: f64 = 2 * PI;
-    const SEC_PER_MIN: f64 = 60f64;
+    const RAD_PER_REV: f64 = 2.0 * PI;
+    const SEC_PER_MIN: f64 = 60.0;
 
-    let rev_per_sec = packet_value / RAD_PER_REV;  
+    let rev_per_sec = packet_value / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
 
-    let output_rpm = rev_per_sec * WHEEL_GEAR_RATIO;
+    let output_rpm = rev_per_min * WHEEL_GEAR_RATIO;
     output_rpm as _
 }
-
 
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
@@ -97,32 +103,24 @@ async fn main(peripherals: Peripherals) {
         if let Some(motor_packet) = get_motor_packet(&mut std::io::stdin()) {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.front_left))?;
+                m.set_velocity(packet_to_motor_rpm(motor_packet.front_left)).unwrap();
             });
             front_rights.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.front_right))?;
+                m.set_velocity(packet_to_motor_rpm(motor_packet.front_right)).unwrap();
             });
             back_lefts.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.back_left))?;
+                m.set_velocity(packet_to_motor_rpm(motor_packet.back_left)).unwrap();
             });
             back_rights.iter_mut().for_each(|m| {
-                m.set_velocity(packet_to_motor_rpm(motor_packet.back_right))?;
+                m.set_velocity(packet_to_motor_rpm(motor_packet.back_right)).unwrap();
             });
         }
 
         let encoder_packet = MotorPacket {
-            front_left: front_lefts[0]
-                .position()?
-                .as_degrees(),
-            front_right: front_rights[0]
-                .position()?
-                .as_degrees(),
-            back_left: back_lefts[0]
-                .position()?
-                .as_degrees(),
-            back_right: back_rights[0]
-                .position()?
-                .as_degrees(),
+            front_left: front_lefts[0].position().unwrap().as_degrees(),
+            front_right: front_rights[0].position().unwrap().as_degrees(),
+            back_left: back_lefts[0].position().unwrap().as_degrees(),
+            back_right: back_rights[0].position().unwrap().as_degrees(),
         };
 
         if send_encoder_packet(&mut std::io::stdout(), &encoder_packet).is_ok() {
