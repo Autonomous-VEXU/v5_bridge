@@ -4,6 +4,7 @@ use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
 use vexide::{prelude::*};
 use std::{io::{Read, Write}, time::Instant};
 
+#[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
 const MOTOR_PACKET_MAGIC: u16 = 0xFEFA;
 const ENCODER_PACKET_MAGIC: u16 = 0xF23B;
@@ -30,7 +31,7 @@ unsafe impl Zeroable for MotorPacket {
     }
 }
 
-fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
+fn get_power_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_secs(1);
 
     let start_time = Instant::now();
@@ -39,7 +40,7 @@ fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
         if MOTOR_PACKET_MAGIC
             .to_le_bytes()
             .iter()
-            .all(|x| rx_port.read_byte() == Some(*x))
+            .all(|x| rx_port.bytes().next().transpose().unwrap() == Some(*x) )
         {
             let mut packet = MotorPacket::zeroed();
             if rx_port.read_exact(bytes_of_mut(&mut packet)).is_ok() {
@@ -51,7 +52,7 @@ fn get_power_packet(rx_port: &mut SerialPort) -> Option<MotorPacket> {
     None
 }
 
-fn send_encoder_packet(tx_port: &mut SerialPort, packet: &MotorPacket) -> Result<(), std::io::Error> {
+fn send_encoder_packet(tx_port: &mut impl Write, packet: &MotorPacket) -> Result<(), std::io::Error> {
     tx_port.write_all(&ENCODER_PACKET_MAGIC.to_le_bytes())?;
     tx_port.write_all(bytes_of(packet))?;
 
@@ -60,8 +61,8 @@ fn send_encoder_packet(tx_port: &mut SerialPort, packet: &MotorPacket) -> Result
 
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
-    let mut rx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await;
-    let mut tx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await;
+    // let mut rx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await;
+    // let mut tx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await;
     let mut front_lefts: [Motor; _] = [
         Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_2, Gearset::Green, Direction::Reverse),
@@ -80,7 +81,7 @@ async fn main(peripherals: Peripherals) {
     ];
 
     loop {
-        if let Some(power_packet) = get_power_packet(&mut rx_serial) {
+        if let Some(power_packet) = get_power_packet(&mut std::io::stdin()) {
             println!("Got power packet: {:?}", power_packet);
             front_lefts.iter_mut().for_each(|m| {
                 m.set_voltage(power_packet.front_left * MOTOR_VOLTAGE_MAX / MOTOR_POWER_MAX)
@@ -119,7 +120,7 @@ async fn main(peripherals: Peripherals) {
                 .as_degrees(),
         };
 
-        if send_encoder_packet(&mut tx_serial, &encoder_packet).is_ok() {
+        if send_encoder_packet(&mut std::io::stdout(), &encoder_packet).is_ok() {
             println!("Sent encoder packet: {:?}", encoder_packet);
         }
     }
