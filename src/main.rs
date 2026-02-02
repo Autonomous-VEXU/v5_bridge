@@ -44,7 +44,7 @@ fn get_motor_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
         if MOTOR_PACKET_MAGIC
             .to_le_bytes()
             .iter()
-            .all(|x| rx_port.bytes().next().transpose().unwrap() == Some(*x))
+            .all(|x| rx_port.bytes().next().transpose().is_ok_and(|b| b == Some(*x)))
         {
             let mut packet = MotorPacket::zeroed();
             println!("read ROS packet: {:?}", packet);
@@ -80,27 +80,33 @@ fn packet_to_motor_rpm(packet_value: f64) -> i32 {
 
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
-    // let mut rx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await;
-    // let mut tx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await;
+    let mut rx_serial = SerialPort::open(peripherals.port_2, BAUD_RATE).await;
+    let mut tx_serial = SerialPort::open(peripherals.port_3, BAUD_RATE).await;
     let mut front_lefts: [Motor; _] = [
-        Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_2, Gearset::Green, Direction::Reverse),
-    ];
-    let mut front_rights: [Motor; 2] = [
-        Motor::new(peripherals.port_3, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_4, Gearset::Green, Direction::Reverse),
-    ];
-    let mut back_lefts: [Motor; 2] = [
         Motor::new(peripherals.port_11, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_12, Gearset::Green, Direction::Reverse),
     ];
+    let mut front_rights: [Motor; 2] = [
+        Motor::new(peripherals.port_19, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_20, Gearset::Green, Direction::Reverse),
+    ];
+    let mut back_lefts: [Motor; 2] = [
+        Motor::new(peripherals.port_7, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_10, Gearset::Green, Direction::Reverse),
+    ];
     let mut back_rights: [Motor; 2] = [
-        Motor::new(peripherals.port_13, Gearset::Green, Direction::Forward),
-        Motor::new(peripherals.port_14, Gearset::Green, Direction::Reverse),
+        Motor::new(peripherals.port_6, Gearset::Green, Direction::Forward),
+        Motor::new(peripherals.port_4, Gearset::Green, Direction::Reverse),
     ];
 
+    let input = &mut rx_serial;
+    let output = &mut tx_serial;
+
+    // let input: &mut impl Read = &mut std::io::stdin();
+    // let output: &mut impl Read = &mut std::io::stdout();
+
     loop {
-        if let Some(motor_packet) = get_motor_packet(&mut std::io::stdin()) {
+        if let Some(motor_packet) = get_motor_packet(input) {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
                 let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.front_left));
@@ -131,7 +137,7 @@ async fn main(peripherals: Peripherals) {
                 .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
         };
 
-        if send_encoder_packet(&mut std::io::stdout(), &encoder_packet).is_ok() {
+        if send_encoder_packet(output, &encoder_packet).is_ok() {
             println!("Sent encoder packet: {:?}", encoder_packet);
         }
     }
