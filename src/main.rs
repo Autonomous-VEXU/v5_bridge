@@ -10,8 +10,11 @@ use vexide::prelude::*;
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
+
 const MOTOR_PACKET_MAGIC: u16 = 0xFEFA;
-const ENCODER_PACKET_MAGIC: u16 = 0xF23B;
+const ENCODER_POSITION_MAGIC: u16 = 0xF23B;
+const ENCODER_VELOCITY_MAGIC: u16 = 0xF81C;
+
 const WHEEL_GEAR_RATIO: f64 = 26f64 / 22f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
@@ -21,6 +24,9 @@ struct MotorPacket {
     back_left: f64,
     back_right: f64,
     front_right: f64,
+    intake1: f64,
+    intake2: f64,
+    intake3: f64,
 }
 
 unsafe impl Zeroable for MotorPacket {
@@ -30,6 +36,9 @@ unsafe impl Zeroable for MotorPacket {
             back_left: 0.,
             back_right: 0.,
             front_right: 0.,
+            intake1: 0.,
+            intake2: 0.,
+            intake3: 0.,
         }
     }
 }
@@ -57,25 +66,51 @@ fn get_motor_packet(rx_port: &mut impl Read) -> Option<MotorPacket> {
     None
 }
 
-fn send_encoder_packet(
+fn send_position_packet(
     tx_port: &mut impl Write,
     packet: &MotorPacket,
 ) -> Result<(), std::io::Error> {
-    tx_port.write_all(&ENCODER_PACKET_MAGIC.to_le_bytes())?;
+    tx_port.write_all(&ENCODER_POSITION_MAGIC.to_le_bytes())?;
     tx_port.write_all(bytes_of(packet))?;
 
     Ok(())
 }
 
-fn packet_to_motor_rpm(packet_value: f64) -> i32 {
-    const RAD_PER_REV: f64 = 2.0 * PI;
-    const SEC_PER_MIN: f64 = 60.0;
+fn send_velocity_packet(
+    tx_port: &mut impl Write,
+    packet: &MotorPacket,
+) -> Result<(), std::io::Error> {
+    tx_port.write_all(&ENCODER_VELOCITY_MAGIC.to_le_bytes())?;
+    tx_port.write_all(bytes_of(packet))?;
 
+    Ok(())
+}
+
+const RAD_PER_REV: f64 = 2.0 * PI;
+const SEC_PER_MIN: f64 = 60.0;
+
+fn packet_to_wheel_motor_rpm(packet_value: f64) -> i32 {
     let rev_per_sec = packet_value / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
 
     let output_rpm = rev_per_min * WHEEL_GEAR_RATIO;
     output_rpm as _
+}
+
+fn packet_to_intake_motor_rpm(packet_value: f64) -> i32 {
+    let rev_per_sec = packet_value / RAD_PER_REV;
+    let rev_per_min = rev_per_sec * SEC_PER_MIN;
+    
+    rev_per_min as _
+}
+
+
+fn rpm_to_intake_rad_per_sec(rpm: f64) -> f64 {
+    rpm * RAD_PER_REV / SEC_PER_MIN
+}
+
+fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f64 {
+    (rpm * RAD_PER_REV / SEC_PER_MIN) / WHEEL_GEAR_RATIO
 }
 
 #[vexide::main]
@@ -98,6 +133,9 @@ async fn main(peripherals: Peripherals) {
         Motor::new(peripherals.port_6, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_4, Gearset::Green, Direction::Reverse),
     ];
+    let mut intake1 = Motor::new(peripherals.port_13, Gearset::Green, Direction::Forward);
+    let mut intake2 = Motor::new(peripherals.port_14, Gearset::Green, Direction::Forward);
+    let mut intake3 = Motor::new(peripherals.port_15, Gearset::Green, Direction::Forward);
 
     let input = &mut rx_serial;
     let output = &mut tx_serial;
@@ -109,20 +147,23 @@ async fn main(peripherals: Peripherals) {
         if let Some(motor_packet) = get_motor_packet(input) {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.front_left));
+                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_left));
             });
             front_rights.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.front_right));
+                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_right));
             });
             back_lefts.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.back_left));
+                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_left));
             });
             back_rights.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_motor_rpm(motor_packet.back_right));
+                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_right));
             });
+            let _ = intake1.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake1));
+            let _ = intake2.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake2));
+            let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
         }
 
-        let encoder_packet = MotorPacket {
+        let position_packet = MotorPacket {
             front_left: front_lefts[0]
                 .position()
                 .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
@@ -135,10 +176,47 @@ async fn main(peripherals: Peripherals) {
             back_right: back_rights[0]
                 .position()
                 .map_or(-f64::INFINITY, |x| x.as_radians() / WHEEL_GEAR_RATIO),
+            intake1: intake1
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians()),
+            intake2: intake2
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians()),
+            intake3: intake3
+                .position()
+                .map_or(-f64::INFINITY, |x| x.as_radians()),
         };
 
-        if send_encoder_packet(output, &encoder_packet).is_ok() {
-            println!("Sent encoder packet: {:?}", encoder_packet);
+        if send_position_packet(output, &position_packet).is_ok() {
+            println!("Sent position packet: {:?}", position_packet);
+        }
+
+        let velocity_packet = MotorPacket {
+            front_left: front_lefts[0]
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_wheel_rad_per_sec),
+            front_right: front_rights[0]
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+            back_left: back_lefts[0]
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+            back_right: back_rights[0]
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+            intake1: intake1
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+            intake2: intake2
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+            intake3: intake3
+                .velocity()
+                .map_or(-f64::INFINITY, rpm_to_intake_rad_per_sec),
+        };
+
+        if send_velocity_packet(output, &velocity_packet).is_ok() {
+            println!("Sent velocity packet: {:?}", velocity_packet);
         }
     }
 }
