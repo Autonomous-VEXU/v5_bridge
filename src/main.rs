@@ -1,10 +1,12 @@
 use core::time::Duration;
 use std::{
-    f64::consts::PI, ffi::CStr, io::{Read, Write}, time::Instant
+    f64::consts::PI,
+    io::{self, Read, Write},
+    time::Instant,
 };
 
-use bytemuck::{Pod, Zeroable, bytes_of, bytes_of_mut};
-use vexide::{display::Font, math::Point2, prelude::*};
+use bytemuck::{Pod, Zeroable, from_bytes, bytes_of};
+use vexide::prelude::*;
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
@@ -41,46 +43,37 @@ unsafe impl Zeroable for MotorPacket {
     }
 }
 
-async fn get_motor_packet(rx_port: &mut impl Read, tx_port: &mut impl Write) -> Result<MotorPacket, MotorPacket> {
+async fn get_motor_packet(
+    rx_port: &mut impl Read,
+) -> io::Result<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_millis(100);
     println!("getting packet...");
 
     let start_time = Instant::now();
-    let mut packet = MotorPacket::zeroed();
+    let mut buf = vec![];
     while Instant::now().duration_since(start_time) < TIMEOUT {
-        let mut byte = [0u8; 1];
-        
-        if rx_port.read_exact(&mut byte).is_ok() && byte[0] == 0xFA {
-            if rx_port.read_exact(&mut byte).is_ok() && byte[0] == 0xFE {
-                rx_port.read_exact(bytes_of_mut(&mut packet));
-                return Ok(packet);
+        let mut sub_buf = vec![];
+        rx_port.read_to_end(&mut sub_buf)?;
+        buf.extend(sub_buf);
+
+        let full_packet_len = size_of_val(&MOTOR_PACKET_MAGIC) + size_of::<MotorPacket>();
+        if buf.len() > full_packet_len {
+            let mut idx = buf.len() - full_packet_len;
+            while idx > 0 {
+                if buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
+                    == MOTOR_PACKET_MAGIC.to_le_bytes()
+                {
+                    let packet: &MotorPacket = from_bytes(&buf[idx..(idx + size_of::<MotorPacket>())]);
+                    println!("{:?}", packet);
+                    return Ok(packet.clone());
+                }
+                idx -= 1;
             }
         }
+        sleep(Duration::from_millis(1)).await;
     }
-    return Err(packet);
-        
-    //     // Check for the whole magic, byte by byte
 
-
-    //     if MOTOR_PACKET_MAGIC
-    //         .to_le_bytes()
-    //         .iter()
-    //         .all(|x| rx_port.bytes().next().transpose().is_ok_and(|b| b == Some(*x)))
-    //     {
-    //         let mut packet = MotorPacket::zeroed();
-    //         if rx_port.read_exact(bytes_of_mut(&mut packet)).is_ok() {
-    //             println!("read ROS packet: {:?}", packet);
-                
-    //             write!(display, "hello").unwrap();
-    //             return Some(packet);
-    //         }
-    //     } else {
-    //         write!(display, "FAILED").unwrap();
-    //         // let _ = tx_port.write_all(b"W");
-    //     }
-    // }
-
-    // None
+    Err(io::ErrorKind::TimedOut.into())
 }
 
 fn send_position_packet(
@@ -117,10 +110,9 @@ fn packet_to_wheel_motor_rpm(packet_value: f64) -> i32 {
 fn packet_to_intake_motor_rpm(packet_value: f64) -> i32 {
     let rev_per_sec = packet_value / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
-    
+
     rev_per_min as _
 }
-
 
 fn rpm_to_intake_rad_per_sec(rpm: f64) -> f64 {
     rpm * RAD_PER_REV / SEC_PER_MIN
@@ -162,11 +154,10 @@ async fn main(mut peripherals: Peripherals) {
 
     use std::fmt::Write;
 
-    
     let mut i = 0;
     loop {
         i = (i + 1) % 3;
-        let motor_packet = get_motor_packet(input, output).await;
+        let motor_packet = get_motor_packet(input).await;
         if let Ok(motor_packet) = motor_packet {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
@@ -184,8 +175,6 @@ async fn main(mut peripherals: Peripherals) {
             let _ = intake1.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake1));
             let _ = intake2.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake2));
             let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
-        } else {
-            write!(peripherals.display, "{motor_packet:?}");
         }
 
         let position_packet = MotorPacket {
