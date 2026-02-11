@@ -15,7 +15,7 @@ const MOTOR_PACKET_MAGIC: u64     = 0xFEFAABCD1234BEEF;
 const ENCODER_POSITION_MAGIC: u64 = 0xF23BDEAD6789ACBD;
 const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB00B1350C0CA;
 
-const WHEEL_GEAR_RATIO: f64 = 26f64 / 22f64;
+const WHEEL_GEAR_RATIO: f64 = 22f64 / 26f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
@@ -101,7 +101,7 @@ fn packet_to_wheel_motor_rpm(packet_value: f32) -> i32 {
     let rev_per_sec = (packet_value as f64) / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
 
-    let output_rpm = rev_per_min * WHEEL_GEAR_RATIO;
+    let output_rpm = rev_per_min / WHEEL_GEAR_RATIO;
     output_rpm as _
 }
 
