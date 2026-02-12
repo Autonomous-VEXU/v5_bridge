@@ -1,4 +1,4 @@
-use core::time::Duration;
+use core::{time::Duration, fmt::Write as _};
 use std::{
     f64::consts::PI,
     io::{self, Read, Write},
@@ -6,7 +6,7 @@ use std::{
 };
 
 use bytemuck::{Pod, Zeroable, from_bytes, bytes_of};
-use vexide::prelude::*;
+use vexide::{color::Color, prelude::*};
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
@@ -121,7 +121,7 @@ fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f32 {
 }
 
 #[vexide::main]
-async fn main(peripherals: Peripherals) {
+async fn main(mut peripherals: Peripherals) {
     let mut rx_serial = SerialPort::open(peripherals.port_15, BAUD_RATE).await;
     let mut tx_serial = SerialPort::open(peripherals.port_16, BAUD_RATE).await;
     let mut front_rights: [Motor; _] = [
@@ -173,62 +173,67 @@ async fn main(peripherals: Peripherals) {
             let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
         }
 
+        
         let position_packet = MotorPacket {
             magic: ENCODER_POSITION_MAGIC,
             front_left: front_lefts[0]
                 .position()
                 .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             front_right: front_rights[0]
-                .position()
-                .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             back_left: back_lefts[0]
-                .position()
-                .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             back_right: back_rights[0]
-                .position()
-                .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             intake1: intake1
-                .position()
-                .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
             intake2: intake2
-                .position()
-                .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
             intake3: intake3
-                .position()
-                .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+            .position()
+            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
         };
-
+        
         if i == 1 && send_position_packet(output, &position_packet).is_ok() {
             // println!("Sent position packet: {:?}", position_packet);
         }
-
+        peripherals.display.erase(Color::from_raw(0));
+        let _ = writeln!(peripherals.display, "--POSITIONS:\n{position_packet:?}");
+        
         let velocity_packet = MotorPacket {
             magic: ENCODER_VELOCITY_MAGIC,
             front_left: front_lefts[0]
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
             front_right: front_rights[0]
                 .velocity()
                 .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
             back_left: back_lefts[0]
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
             back_right: back_rights[0]
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
             intake1: intake1
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
             intake2: intake2
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
             intake3: intake3
-                .velocity()
-                .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+            .velocity()
+            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
         };
-
+        
         if i == 2 && send_velocity_packet(output, &velocity_packet).is_ok() {
             // println!("Sent velocity packet: {:?}", velocity_packet);
         }
+        let _ = write!(peripherals.display, "--VELOCITIES:\n{velocity_packet:?}");
+
     }
 }
