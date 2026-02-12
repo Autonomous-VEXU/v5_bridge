@@ -57,9 +57,8 @@ async fn get_motor_packet(
         rx_port.read_to_end(&mut sub_buf)?;
         buf.extend(sub_buf);
 
-        let full_packet_len = size_of_val(&MOTOR_PACKET_MAGIC) + size_of::<MotorPacket>();
-        if buf.len() > full_packet_len {
-            let mut idx = buf.len() - full_packet_len;
+        if buf.len() > size_of::<MotorPacket>() {
+            let mut idx = buf.len() - size_of::<MotorPacket>();
             while idx > 0 {
                 if buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
