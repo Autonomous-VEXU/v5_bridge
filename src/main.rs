@@ -47,24 +47,27 @@ unsafe impl Zeroable for MotorPacket {
 
 async fn get_motor_packet(
     rx_port: &mut impl Read,
+    persistent_buf: &mut Vec<u8>,
 ) -> io::Result<MotorPacket> {
     const TIMEOUT: Duration = Duration::from_millis(100);
 
     let start_time = Instant::now();
-    let mut buf = vec![];
     while Instant::now().duration_since(start_time) < TIMEOUT {
         let mut sub_buf = vec![];
         rx_port.read_to_end(&mut sub_buf)?;
-        buf.extend(sub_buf);
+        persistent_buf.extend(sub_buf);
 
-        if buf.len() > size_of::<MotorPacket>() {
-            let mut idx = buf.len() - size_of::<MotorPacket>();
+        if persistent_buf.len() > size_of::<MotorPacket>() {
+            let mut idx = persistent_buf.len() - size_of::<MotorPacket>();
             while idx > 0 {
-                if buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
+                if persistent_buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
                 {
-                    let packet: &MotorPacket = from_bytes(&buf[idx..(idx + size_of::<MotorPacket>())]);
-                    return Ok(packet.clone());
+                    let end_of_packet = idx + size_of::<MotorPacket>();
+                    let packet = from_bytes::<MotorPacket>(&persistent_buf[idx..end_of_packet]).clone();
+                    persistent_buf.drain(..end_of_packet);
+
+                    return Ok(packet);
                 }
                 idx -= 1;
             }
@@ -149,10 +152,12 @@ async fn main(mut peripherals: Peripherals) {
     // let input = &mut std::io::stdin();
     // let output = &mut std::io::stdout();
 
+
     let mut i = 0;
+    let mut persistent_motor_buf = vec![];
     loop {
         i = (i + 1) % 3;
-        let motor_packet = get_motor_packet(input).await;
+        let motor_packet = get_motor_packet(input, &mut persistent_motor_buf).await;
         if let Ok(motor_packet) = motor_packet {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
