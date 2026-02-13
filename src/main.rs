@@ -58,16 +58,20 @@ async fn get_motor_packet(
         persistent_buf.extend(sub_buf);
 
         if persistent_buf.len() > size_of::<MotorPacket>() {
-            let mut idx = persistent_buf.len() - size_of::<MotorPacket>();
-            while idx >= 0 {
+            let mut idx = (persistent_buf.len() - size_of::<MotorPacket>()) as usize;
+            loop {
                 if persistent_buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
                 {
-                    let end_of_packet = idx + size_of::<MotorPacket>();
-                    let packet = from_bytes::<MotorPacket>(&persistent_buf[idx..end_of_packet]).clone();
+                    let end_of_packet = idx as usize + size_of::<MotorPacket>();
+                    let packet = from_bytes::<MotorPacket>(&persistent_buf[idx as usize..end_of_packet]).clone();
                     persistent_buf.drain(..end_of_packet);
 
                     return Ok(packet);
+                }
+
+                if idx == 0 {
+                    break;
                 }
                 idx -= 1;
             }
