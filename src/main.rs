@@ -218,26 +218,26 @@ async fn main(mut peripherals: Peripherals) {
         let velocity_packet = MotorPacket {
             magic: ENCODER_VELOCITY_MAGIC,
             front_left: front_lefts[0]
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_wheel_rad_per_sec),
             front_right: front_rights[0]
                 .velocity()
-                .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+                .map_or(0f32, rpm_to_wheel_rad_per_sec),
             back_left: back_lefts[0]
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_wheel_rad_per_sec),
             back_right: back_rights[0]
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_wheel_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_wheel_rad_per_sec),
             intake1: intake1
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_intake_rad_per_sec),
             intake2: intake2
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_intake_rad_per_sec),
             intake3: intake3
-            .velocity()
-            .map_or(-f32::INFINITY, rpm_to_intake_rad_per_sec),
+                .velocity()
+                .map_or(0f32, rpm_to_intake_rad_per_sec),
         };
         
         if i == 2 && send_velocity_packet(output, &velocity_packet).is_ok() {
