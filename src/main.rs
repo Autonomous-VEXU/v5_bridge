@@ -184,25 +184,25 @@ async fn main(mut peripherals: Peripherals) {
             magic: ENCODER_POSITION_MAGIC,
             front_left: front_lefts[0]
                 .position()
-                .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+                .map_or(0f32, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             front_right: front_rights[0]
-            .position()
-            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+                .position()
+                .map_or(0f32, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             back_left: back_lefts[0]
-            .position()
-            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+                .position()
+                .map_or(0f32, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             back_right: back_rights[0]
-            .position()
-            .map_or(-f32::INFINITY, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
+                .position()
+                .map_or(0f32, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
             intake1: intake1
-            .position()
-            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+                .position()
+                .map_or(0f32, |x| x.as_radians() as f32),
             intake2: intake2
-            .position()
-            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+                .position()
+                .map_or(0f32, |x| x.as_radians() as f32),
             intake3: intake3
-            .position()
-            .map_or(-f32::INFINITY, |x| x.as_radians() as f32),
+                .position()
+                .map_or(0f32, |x| x.as_radians() as f32),
         };
         
         if i == 1 && send_position_packet(output, &position_packet).is_ok() {
