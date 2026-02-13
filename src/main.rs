@@ -59,7 +59,7 @@ async fn get_motor_packet(
 
         if persistent_buf.len() > size_of::<MotorPacket>() {
             let mut idx = persistent_buf.len() - size_of::<MotorPacket>();
-            while idx > 0 {
+            while idx >= 0 {
                 if persistent_buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
                 {
@@ -74,6 +74,8 @@ async fn get_motor_packet(
         }
         sleep(Duration::from_millis(1)).await;
     }
+
+    persistent_buf.clear();
 
     Err(io::ErrorKind::TimedOut.into())
 }
