@@ -24,6 +24,10 @@ async fn main(peripherals: Peripherals) {
 
     let mut count = 1u32;
     loop {
+        let count_packet = CountPacket {
+            count,
+        };
+        
         let _ = output.write_all(bytes_of(&count_packet));
         
         count += 1;
