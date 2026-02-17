@@ -20,17 +20,6 @@ const WHEEL_GEAR_RATIO: f64 = 1f64;
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
 
-// struct MotorPacket {
-//     magic: u64,
-//     front_left: f32,
-//     back_left: f32,
-//     back_right: f32,
-//     front_right: f32,
-//     intake1: f32,
-//     intake2: f32,
-//     intake3: f32,
-// }
-
 struct MotorPacket{
     magic: u64,
     front_left: f32,
