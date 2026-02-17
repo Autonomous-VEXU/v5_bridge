@@ -130,8 +130,8 @@ fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f32 {
 
 #[vexide::main]
 async fn main(mut peripherals: Peripherals) {
-    let mut rx_serial = SerialPort::open(peripherals.port_15, BAUD_RATE).await;
-    let mut tx_serial = SerialPort::open(peripherals.port_16, BAUD_RATE).await;
+    let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
+    let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
     let mut front_rights: [Motor; _] = [
         Motor::new(peripherals.port_2, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_1, Gearset::Green, Direction::Reverse),
@@ -148,9 +148,9 @@ async fn main(mut peripherals: Peripherals) {
         Motor::new(peripherals.port_12, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_11, Gearset::Green, Direction::Reverse),
     ];
-    let mut intake1 = Motor::new(peripherals.port_18, Gearset::Green, Direction::Forward);
-    let mut intake2 = Motor::new(peripherals.port_19, Gearset::Green, Direction::Forward);
-    let mut intake3 = Motor::new(peripherals.port_20, Gearset::Green, Direction::Forward);
+    let mut intake1 = Motor::new(peripherals.port_15, Gearset::Green, Direction::Forward);
+    let mut intake2 = Motor::new(peripherals.port_16, Gearset::Green, Direction::Forward);
+    let mut intake3 = Motor::new(peripherals.port_17, Gearset::Green, Direction::Forward);
 
     let input = &mut rx_serial;
     let output = &mut tx_serial;
