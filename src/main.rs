@@ -12,10 +12,11 @@ use vexide::{color::Color, prelude::*};
 const BAUD_RATE: u32 = 115200;
 
 const MOTOR_PACKET_MAGIC: u64     = 0xFEFAABCD1234BEEF;
+const RESET_ENCODER_MAGIC: u64    = 0xABCD5869B0B1CCCC;
 const ENCODER_POSITION_MAGIC: u64 = 0xF23BDEAD6789ACBD;
 const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB00B1350C0CA;
 
-const WHEEL_GEAR_RATIO: f64 = 1f64;
+const WHEEL_GEAR_RATIO: f64 = 1f64/2f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
@@ -46,10 +47,15 @@ unsafe impl Zeroable for MotorPacket {
     }
 }
 
-async fn get_motor_packet(
+enum InputPacketType {
+    Motor(MotorPacket),
+    ResetEncoders,
+}
+
+async fn get_packet(
     rx_port: &mut impl Read,
     persistent_buf: &mut Vec<u8>,
-) -> io::Result<MotorPacket> {
+) -> io::Result<InputPacketType> {
     const TIMEOUT: Duration = Duration::from_millis(100);
 
     let start_time = Instant::now();
@@ -68,7 +74,11 @@ async fn get_motor_packet(
                     let packet = from_bytes::<MotorPacket>(&persistent_buf[idx as usize..end_of_packet]).clone();
                     persistent_buf.drain(..end_of_packet);
 
-                    return Ok(packet);
+                    return Ok(InputPacketType::Motor(packet));
+                } else if persistent_buf[idx..(idx + size_of_val(&RESET_ENCODER_MAGIC))]
+                    == RESET_ENCODER_MAGIC.to_le_bytes()
+                {
+                    return Ok(InputPacketType::ResetEncoders);
                 }
 
                 if idx == 0 {
@@ -158,30 +168,40 @@ async fn main(mut peripherals: Peripherals) {
 
 
     let mut i = 0;
-    let mut persistent_motor_buf = vec![];
+    let mut persistent_input_buf = vec![];
     loop {
         i = (i + 1) % 3;
-        let motor_packet = get_motor_packet(input, &mut persistent_motor_buf).await;
-        if let Ok(motor_packet) = motor_packet {
-            println!("Got power packet: {:?}", motor_packet);
-            front_lefts.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_left));
-            });
-            front_rights.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_right));
-            });
-            back_lefts.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_left));
-            });
-            back_rights.iter_mut().for_each(|m| {
-                let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_right));
-            });
-            let _ = intake1.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake1));
-            let _ = intake2.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake2));
-            let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
+        match get_packet(input, &mut persistent_input_buf).await {
+            Ok(InputPacketType::Motor(motor_packet)) => {
+                println!("Got power packet: {:?}", motor_packet);
+                front_lefts.iter_mut().for_each(|m| {
+                    let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_left));
+                });
+                front_rights.iter_mut().for_each(|m| {
+                    let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_right));
+                });
+                back_lefts.iter_mut().for_each(|m| {
+                    let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_left));
+                });
+                back_rights.iter_mut().for_each(|m| {
+                    let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.back_right));
+                });
+                let _ = intake1.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake1));
+                let _ = intake2.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake2));
+                let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
+            },
+            Ok(InputPacketType::ResetEncoders) => {
+                front_lefts.iter_mut().for_each(|m| { let _ = m.reset_position(); });
+                back_lefts.iter_mut().for_each(|m| { let _ = m.reset_position(); });
+                front_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
+                back_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
+                let _ = intake1.reset_position();
+                let _ = intake2.reset_position();
+                let _ = intake3.reset_position();
+            }
+            Err(_) => {}
         }
 
-        
         let position_packet = MotorPacket {
             magic: ENCODER_POSITION_MAGIC,
             front_left: front_lefts[0]
