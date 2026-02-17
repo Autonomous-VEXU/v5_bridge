@@ -20,7 +20,6 @@ const WHEEL_GEAR_RATIO: f64 = 1f64/2f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
-
 struct MotorPacket{
     magic: u64,
     front_left: f32,
@@ -78,6 +77,7 @@ async fn get_packet(
                 } else if persistent_buf[idx..(idx + size_of_val(&RESET_ENCODER_MAGIC))]
                     == RESET_ENCODER_MAGIC.to_le_bytes()
                 {
+                    persistent_buf.drain(..(idx as usize + size_of_val(&RESET_ENCODER_MAGIC)));
                     return Ok(InputPacketType::ResetEncoders);
                 }
 
