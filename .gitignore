@@ -89,6 +89,7 @@ $RECYCLE.BIN/
 
 # Local History for Visual Studio Code
 .history/
+.pnotes
 
 # Built Visual Studio Code Extensions
 *.vsix
