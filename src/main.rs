@@ -15,7 +15,7 @@ const MOTOR_PACKET_MAGIC: u64     = 0xFEFAABCD1234BEEF;
 const ENCODER_POSITION_MAGIC: u64 = 0xF23BDEAD6789ACBD;
 const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB00B1350C0CA;
 
-const WHEEL_GEAR_RATIO: f64 = 1f64;
+const WHEEL_GEAR_RATIO: f64 = 1f64 /2f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
@@ -131,8 +131,8 @@ fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f32 {
 
 #[vexide::main]
 async fn main(mut peripherals: Peripherals) {
-    let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
-    let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
+//     let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
+//     let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
     let mut front_rights: [Motor; _] = [ 
         Motor::new(peripherals.port_4, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_3, Gearset::Green, Direction::Reverse),
@@ -153,15 +153,14 @@ async fn main(mut peripherals: Peripherals) {
     let mut intake2 = Motor::new(peripherals.port_16, Gearset::Green, Direction::Forward);
     let mut intake3 = Motor::new(peripherals.port_17, Gearset::Green, Direction::Forward);
 
-    let input = &mut rx_serial;
-    let output = &mut tx_serial;
-
+    // let input = &mut rx_serial;
+    // let output = &mut tx_serial;
 
     let mut i = 0;
     let mut persistent_motor_buf = vec![];
     loop {
         i = (i + 1) % 3;
-        let motor_packet = get_motor_packet(input, &mut persistent_motor_buf).await;
+        let motor_packet = get_motor_packet(&mut std::io::stdin(), &mut persistent_motor_buf).await;
         if let Ok(motor_packet) = motor_packet {
             println!("Got power packet: {:?}", motor_packet);
             front_lefts.iter_mut().for_each(|m| {
@@ -207,7 +206,7 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, |x| x.as_radians() as f32),
         };
         
-        if i == 1 && send_position_packet(output, &position_packet).is_ok() {
+        if i == 1 && send_position_packet(&mut std::io::stdout(), &position_packet).is_ok() {
             // println!("Sent position packet: {:?}", position_packet);
         }
         peripherals.display.erase(Color::from_raw(0));
@@ -238,7 +237,7 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, rpm_to_intake_rad_per_sec),
         };
         
-        if i == 2 && send_velocity_packet(output, &velocity_packet).is_ok() {
+        if i == 2 && send_velocity_packet(&mut std::io::stdout(), &velocity_packet).is_ok() {
             // println!("Sent velocity packet: {:?}", velocity_packet);
         }
         let _ = write!(peripherals.display, "--VELOCITIES:\n{velocity_packet:?}");
