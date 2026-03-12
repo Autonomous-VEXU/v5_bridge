@@ -14,7 +14,7 @@ const BAUD_RATE: u32 = 115200;
 const MOTOR_PACKET_MAGIC: u64     = 0xFEFAABCD1234BEEF;
 const RESET_ENCODER_MAGIC: u64    = 0xABCD5869B0B1CCCC;
 const ENCODER_POSITION_MAGIC: u64 = 0xF23BDEAD6789ACBD;
-const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB00B1350C0CA;
+const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB3924EA7C0CA;
 
 const WHEEL_GEAR_RATIO: f64 = 1f64/2f64;
 
@@ -141,8 +141,8 @@ fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f32 {
 
 #[vexide::main]
 async fn main(mut peripherals: Peripherals) {
-    let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
-    let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
+    // let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
+    // let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
     let mut front_rights: [Motor; _] = [ 
         Motor::new(peripherals.port_4, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_3, Gearset::Green, Direction::Reverse),
@@ -163,9 +163,11 @@ async fn main(mut peripherals: Peripherals) {
     let mut intake2 = Motor::new(peripherals.port_16, Gearset::Green, Direction::Forward);
     let mut intake3 = Motor::new(peripherals.port_17, Gearset::Green, Direction::Forward);
 
-    let input = &mut rx_serial;
-    let output = &mut tx_serial;
+    // let input = &mut rx_serial;
+    // let output = &mut tx_serial;
 
+    let input = &mut std::io::stdin();
+    let output = &mut std::io::stdout();
 
     let mut i = 0;
     let mut persistent_input_buf = vec![];
@@ -173,7 +175,7 @@ async fn main(mut peripherals: Peripherals) {
         i = (i + 1) % 3;
         match get_packet(input, &mut persistent_input_buf).await {
             Ok(InputPacketType::Motor(motor_packet)) => {
-                println!("Got power packet: {:?}", motor_packet);
+                //println!("Got power packet: {:?}", motor_packet);
                 front_lefts.iter_mut().for_each(|m| {
                     let _ = m.set_velocity(packet_to_wheel_motor_rpm(motor_packet.front_left));
                 });
