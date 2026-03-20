@@ -20,34 +20,56 @@ const WHEEL_GEAR_RATIO: f64 = 1f64/2f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
-struct MotorPacket{
+struct MotorPowerPacket {
+    magic: u64,
+    front_left: i8,
+    front_right: i8,
+    back_left: i8,
+    back_right: i8,
+    intake1: i8,
+    intake2: i8,
+    intake3: i8,
+}
+
+#[derive(Clone, Copy, Pod, Debug)]
+#[repr(C, packed(1))]
+struct MotorEncoderPacket {
     magic: u64,
     front_left: f32,
     front_right: f32,
     back_left: f32,
     back_right: f32,
-    intake1: f32,
-    intake2: f32,
-    intake3: f32,
 }
 
-unsafe impl Zeroable for MotorPacket {
+unsafe impl Zeroable for MotorPowerPacket {
     fn zeroed() -> Self {
-        MotorPacket {
+        MotorPowerPacket {
+            magic:  0,
+            front_left: 0,
+            front_right: 0,
+            back_left: 0,
+            back_right: 0,
+            intake1: 0,
+            intake2: 0,
+            intake3: 0,
+        }
+    }
+}
+
+unsafe impl Zeroable for MotorEncoderPacket {
+    fn zeroed() -> Self {
+        MotorEncoderPacket {
             magic:  0,
             front_left: 0.,
             front_right: 0.,
             back_left: 0.,
             back_right: 0.,
-            intake1: 0.,
-            intake2: 0.,
-            intake3: 0.,
         }
     }
 }
 
 enum InputPacketType {
-    Motor(MotorPacket),
+    Motor(MotorPowerPacket),
     ResetEncoders,
 }
 
@@ -95,18 +117,9 @@ async fn get_packet(
     Err(io::ErrorKind::TimedOut.into())
 }
 
-fn send_position_packet(
+fn send_encoder_packet(
     tx_port: &mut impl Write,
-    packet: &MotorPacket,
-) -> Result<(), std::io::Error> {
-    tx_port.write_all(bytes_of(packet))?;
-
-    Ok(())
-}
-
-fn send_velocity_packet(
-    tx_port: &mut impl Write,
-    packet: &MotorPacket,
+    packet: &MotorEncoderPacket,
 ) -> Result<(), std::io::Error> {
     tx_port.write_all(bytes_of(packet))?;
 
@@ -116,16 +129,18 @@ fn send_velocity_packet(
 const RAD_PER_REV: f64 = 2.0 * PI;
 const SEC_PER_MIN: f64 = 60.0;
 
-fn packet_to_wheel_motor_rpm(packet_value: f32) -> i32 {
-    let rev_per_sec = (packet_value as f64) / RAD_PER_REV;
+fn packet_to_wheel_motor_rpm(packet_value: i8) -> i32 {
+    let fixed_value = fixed::types::I6F2::from_bits(packet_value);
+    let rev_per_sec = (fixed_value.to_num::<f64>()) / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
 
     let output_rpm = rev_per_min / WHEEL_GEAR_RATIO;
     output_rpm as _
 }
 
-fn packet_to_intake_motor_rpm(packet_value: f32) -> i32 {
-    let rev_per_sec = (packet_value as f64) / RAD_PER_REV;
+fn packet_to_intake_motor_rpm(packet_value: i8) -> i32 {
+    let fixed_value = fixed::types::I6F2::from_bits(packet_value);
+    let rev_per_sec = (fixed_value.to_num::<f64>()) / RAD_PER_REV;
     let rev_per_min = rev_per_sec * SEC_PER_MIN;
 
     rev_per_min as _
@@ -197,9 +212,6 @@ async fn main(mut peripherals: Peripherals) {
                 back_lefts.iter_mut().for_each(|m| { let _ = m.reset_position(); });
                 front_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
                 back_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
-                let _ = intake1.reset_position();
-                let _ = intake2.reset_position();
-                let _ = intake3.reset_position();
             }
             Err(_) => {}
         }

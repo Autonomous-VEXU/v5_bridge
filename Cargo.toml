@@ -14,5 +14,6 @@ compress = true
 
 [dependencies]
 bytemuck = { version = "1.24.0", features = ["derive"] }
+fixed = "1.31.0"
 vexide = { version = "0.8.0", features = ["full", "default-sdk"] }
 
