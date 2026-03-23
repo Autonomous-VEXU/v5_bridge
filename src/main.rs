@@ -100,6 +100,7 @@ fn send_position_packet(
     packet: &MotorPacket,
 ) -> Result<(), std::io::Error> {
     tx_port.write_all(bytes_of(packet))?;
+    tx_port.flush()?;
 
     Ok(())
 }
@@ -109,6 +110,7 @@ fn send_velocity_packet(
     packet: &MotorPacket,
 ) -> Result<(), std::io::Error> {
     tx_port.write_all(bytes_of(packet))?;
+    tx_port.flush()?;
 
     Ok(())
 }
