@@ -39,6 +39,9 @@ struct MotorEncoderPacket {
     front_right: f32,
     back_left: f32,
     back_right: f32,
+    intake1: f32,
+    intake2: f32,
+    intake3: f32,
 }
 
 unsafe impl Zeroable for MotorPowerPacket {
@@ -64,6 +67,9 @@ unsafe impl Zeroable for MotorEncoderPacket {
             front_right: 0.,
             back_left: 0.,
             back_right: 0.,
+            intake1: 0.,
+            intake2: 0.,
+            intake3: 0.,
         }
     }
 }
@@ -85,21 +91,21 @@ async fn get_packet(
         rx_port.read_to_end(&mut sub_buf)?;
         persistent_buf.extend(sub_buf);
 
-        if persistent_buf.len() > size_of::<MotorPacket>() {
-            let mut idx = (persistent_buf.len() - size_of::<MotorPacket>()) as usize;
+        if persistent_buf.len() > size_of::<MotorPowerPacket>() {
+            let mut idx = persistent_buf.len() - size_of::<MotorPowerPacket>();
             loop {
                 if persistent_buf[idx..(idx + size_of_val(&MOTOR_PACKET_MAGIC))]
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
                 {
-                    let end_of_packet = idx as usize + size_of::<MotorPacket>();
-                    let packet = from_bytes::<MotorPacket>(&persistent_buf[idx as usize..end_of_packet]).clone();
+                    let end_of_packet = idx + size_of::<MotorPowerPacket>();
+                    let packet = *from_bytes::<MotorPowerPacket>(&persistent_buf[idx..end_of_packet]);
                     persistent_buf.drain(..end_of_packet);
 
                     return Ok(InputPacketType::Motor(packet));
                 } else if persistent_buf[idx..(idx + size_of_val(&RESET_ENCODER_MAGIC))]
                     == RESET_ENCODER_MAGIC.to_le_bytes()
                 {
-                    persistent_buf.drain(..(idx as usize + size_of_val(&RESET_ENCODER_MAGIC)));
+                    persistent_buf.drain(..(idx + size_of_val(&RESET_ENCODER_MAGIC)));
                     return Ok(InputPacketType::ResetEncoders);
                 }
 
@@ -217,7 +223,7 @@ async fn main(mut peripherals: Peripherals) {
             Err(_) => {}
         }
 
-        let position_packet = MotorPacket {
+        let position_packet = MotorEncoderPacket {
             magic: ENCODER_POSITION_MAGIC,
             front_left: front_lefts[0]
                 .position()
@@ -242,13 +248,13 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, |x| x.as_radians() as f32),
         };
         
-        if i == 1 && send_position_packet(output, &position_packet).is_ok() {
+        if send_encoder_packet(output, &position_packet).is_ok() {
             // println!("Sent position packet: {:?}", position_packet);
         }
         peripherals.display.erase(Color::from_raw(0));
         let _ = writeln!(peripherals.display, "--POSITIONS:\n{position_packet:?}");
         
-        let velocity_packet = MotorPacket {
+        let velocity_packet = MotorEncoderPacket {
             magic: ENCODER_VELOCITY_MAGIC,
             front_left: front_lefts[0]
                 .velocity()
@@ -273,7 +279,7 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, rpm_to_intake_rad_per_sec),
         };
         
-        if i == 2 && send_velocity_packet(output, &velocity_packet).is_ok() {
+        if send_encoder_packet(output, &velocity_packet).is_ok() {
             // println!("Sent velocity packet: {:?}", velocity_packet);
         }
         let _ = write!(peripherals.display, "--VELOCITIES:\n{velocity_packet:?}");
