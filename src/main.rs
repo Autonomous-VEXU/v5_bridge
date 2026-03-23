@@ -122,6 +122,7 @@ fn send_encoder_packet(
     packet: &MotorEncoderPacket,
 ) -> Result<(), std::io::Error> {
     tx_port.write_all(bytes_of(packet))?;
+    tx_port.flush()?;
 
     Ok(())
 }
