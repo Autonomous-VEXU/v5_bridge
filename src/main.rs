@@ -171,10 +171,8 @@ async fn main(mut peripherals: Peripherals) {
     let input = &mut std::io::stdin();
     let output = &mut std::io::stdout();
 
-    let mut i = 0;
     let mut persistent_input_buf = vec![];
     loop {
-        i = (i + 1) % 3;
         match get_packet(input, &mut persistent_input_buf).await {
             Ok(InputPacketType::Motor(motor_packet)) => {
                 //println!("Got power packet: {:?}", motor_packet);
@@ -231,7 +229,7 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, |x| x.as_radians() as f32),
         };
         
-        if i == 1 && send_position_packet(output, &position_packet).is_ok() {
+        if send_position_packet(output, &position_packet).is_ok() {
             // println!("Sent position packet: {:?}", position_packet);
         }
         peripherals.display.erase(Color::from_raw(0));
@@ -262,7 +260,7 @@ async fn main(mut peripherals: Peripherals) {
                 .map_or(0f32, rpm_to_intake_rad_per_sec),
         };
         
-        if i == 2 && send_velocity_packet(output, &velocity_packet).is_ok() {
+        if send_velocity_packet(output, &velocity_packet).is_ok() {
             // println!("Sent velocity packet: {:?}", velocity_packet);
         }
         let _ = write!(peripherals.display, "--VELOCITIES:\n{velocity_packet:?}");
