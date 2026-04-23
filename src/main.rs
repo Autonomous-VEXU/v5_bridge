@@ -1,26 +1,27 @@
-use core::{time::Duration, fmt::Write as _};
+use core::{fmt::Write as _, time::Duration};
 use std::{
     f64::consts::PI,
     io::{self, Read, Write},
     time::Instant,
 };
 
-use bytemuck::{Pod, Zeroable, from_bytes, bytes_of};
-use vexide::{color::Color, prelude::*};
+use bytemuck::{Pod, Zeroable, bytes_of, from_bytes};
+use vexide::{color::Color, math::Point2, prelude::*};
 
 #[allow(unused)] // Unused in USB port
 const BAUD_RATE: u32 = 115200;
 
-const MOTOR_PACKET_MAGIC: u64     = 0xFEFAABCD1234BEEF;
-const RESET_ENCODER_MAGIC: u64    = 0xABCD5869B0B1CCCC;
+const MOTOR_PACKET_MAGIC: u64 = 0xFEFAABCD1234BEEF;
+const RESET_ENCODER_MAGIC: u64 = 0xABCD5869B0B1CCCC;
 const ENCODER_POSITION_MAGIC: u64 = 0xF23BDEAD6789ACBD;
 const ENCODER_VELOCITY_MAGIC: u64 = 0xF81CB3924EA7C0CA;
+const GPS_MAGIC: u64 = 0x9F3C7A2E8B5D1046;
 
-const WHEEL_GEAR_RATIO: f64 = 1f64/2f64;
+const WHEEL_GEAR_RATIO: f64 = 1f64 / 2f64;
 
 #[derive(Clone, Copy, Pod, Debug)]
 #[repr(C, packed(1))]
-struct MotorPacket{
+struct MotorPacket {
     magic: u64,
     front_left: f32,
     front_right: f32,
@@ -34,7 +35,7 @@ struct MotorPacket{
 unsafe impl Zeroable for MotorPacket {
     fn zeroed() -> Self {
         MotorPacket {
-            magic:  0,
+            magic: 0,
             front_left: 0.,
             front_right: 0.,
             back_left: 0.,
@@ -45,6 +46,28 @@ unsafe impl Zeroable for MotorPacket {
         }
     }
 }
+
+#[derive(Clone, Copy, Pod, Debug)]
+#[repr(C, packed(1))]
+struct GpsPacket {
+    magic: u64,
+    x: f64,
+    y: f64,
+    heading: f64,
+}
+
+
+unsafe impl Zeroable for GpsPacket {
+    fn zeroed() -> Self {
+        GpsPacket {
+            magic: 0,
+            x: 0.,
+            y: 0.,
+            heading: 0.,
+        }
+    }
+}
+
 
 enum InputPacketType {
     Motor(MotorPacket),
@@ -70,7 +93,9 @@ async fn get_packet(
                     == MOTOR_PACKET_MAGIC.to_le_bytes()
                 {
                     let end_of_packet = idx as usize + size_of::<MotorPacket>();
-                    let packet = from_bytes::<MotorPacket>(&persistent_buf[idx as usize..end_of_packet]).clone();
+                    let packet =
+                        from_bytes::<MotorPacket>(&persistent_buf[idx as usize..end_of_packet])
+                            .clone();
                     persistent_buf.drain(..end_of_packet);
 
                     return Ok(InputPacketType::Motor(packet));
@@ -95,19 +120,9 @@ async fn get_packet(
     Err(io::ErrorKind::TimedOut.into())
 }
 
-fn send_position_packet(
+fn send_packet<T: Pod>(
     tx_port: &mut impl Write,
-    packet: &MotorPacket,
-) -> Result<(), std::io::Error> {
-    tx_port.write_all(bytes_of(packet))?;
-    tx_port.flush()?;
-
-    Ok(())
-}
-
-fn send_velocity_packet(
-    tx_port: &mut impl Write,
-    packet: &MotorPacket,
+    packet: &T,
 ) -> Result<(), std::io::Error> {
     tx_port.write_all(bytes_of(packet))?;
     tx_port.flush()?;
@@ -145,7 +160,7 @@ fn rpm_to_wheel_rad_per_sec(rpm: f64) -> f32 {
 async fn main(mut peripherals: Peripherals) {
     // let mut rx_serial = SerialPort::open(peripherals.port_20, BAUD_RATE).await; //tx on comms board
     // let mut tx_serial = SerialPort::open(peripherals.port_19, BAUD_RATE).await; //rx on comms board
-    let mut front_rights: [Motor; _] = [ 
+    let mut front_rights: [Motor; _] = [
         Motor::new(peripherals.port_4, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_3, Gearset::Green, Direction::Reverse),
     ];
@@ -153,17 +168,26 @@ async fn main(mut peripherals: Peripherals) {
         Motor::new(peripherals.port_2, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_1, Gearset::Green, Direction::Reverse),
     ];
-    let mut back_rights: [Motor; 2] = [ //should be back right
+    let mut back_rights: [Motor; 2] = [
+        //should be back right
         Motor::new(peripherals.port_14, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_13, Gearset::Green, Direction::Reverse),
     ];
-    let mut back_lefts: [Motor; 2] = [ //should be back left
+    let mut back_lefts: [Motor; 2] = [
+        //should be back left
         Motor::new(peripherals.port_12, Gearset::Green, Direction::Forward),
         Motor::new(peripherals.port_11, Gearset::Green, Direction::Reverse),
     ];
     let mut intake1 = Motor::new(peripherals.port_15, Gearset::Green, Direction::Forward);
     let mut intake2 = Motor::new(peripherals.port_16, Gearset::Green, Direction::Forward);
     let mut intake3 = Motor::new(peripherals.port_17, Gearset::Green, Direction::Forward);
+
+    let gps = GpsSensor::new(
+        peripherals.port_18,
+        Point2 { x: 0., y: 0. },
+        Point2 { x: 0., y: 0. },
+        0.,
+    );
 
     // let input = &mut rx_serial;
     // let output = &mut tx_serial;
@@ -191,12 +215,20 @@ async fn main(mut peripherals: Peripherals) {
                 let _ = intake1.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake1));
                 let _ = intake2.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake2));
                 let _ = intake3.set_velocity(packet_to_intake_motor_rpm(motor_packet.intake3));
-            },
+            }
             Ok(InputPacketType::ResetEncoders) => {
-                front_lefts.iter_mut().for_each(|m| { let _ = m.reset_position(); });
-                back_lefts.iter_mut().for_each(|m| { let _ = m.reset_position(); });
-                front_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
-                back_rights.iter_mut().for_each(|m| { let _ = m.reset_position(); });
+                front_lefts.iter_mut().for_each(|m| {
+                    let _ = m.reset_position();
+                });
+                back_lefts.iter_mut().for_each(|m| {
+                    let _ = m.reset_position();
+                });
+                front_rights.iter_mut().for_each(|m| {
+                    let _ = m.reset_position();
+                });
+                back_rights.iter_mut().for_each(|m| {
+                    let _ = m.reset_position();
+                });
                 let _ = intake1.reset_position();
                 let _ = intake2.reset_position();
                 let _ = intake3.reset_position();
@@ -218,23 +250,17 @@ async fn main(mut peripherals: Peripherals) {
             back_right: back_rights[0]
                 .position()
                 .map_or(0f32, |x| (x.as_radians() / WHEEL_GEAR_RATIO) as f32),
-            intake1: intake1
-                .position()
-                .map_or(0f32, |x| x.as_radians() as f32),
-            intake2: intake2
-                .position()
-                .map_or(0f32, |x| x.as_radians() as f32),
-            intake3: intake3
-                .position()
-                .map_or(0f32, |x| x.as_radians() as f32),
+            intake1: intake1.position().map_or(0f32, |x| x.as_radians() as f32),
+            intake2: intake2.position().map_or(0f32, |x| x.as_radians() as f32),
+            intake3: intake3.position().map_or(0f32, |x| x.as_radians() as f32),
         };
-        
-        if send_position_packet(output, &position_packet).is_ok() {
+
+        if send_packet(output, &position_packet).is_ok() {
             // println!("Sent position packet: {:?}", position_packet);
         }
         peripherals.display.erase(Color::from_raw(0));
         let _ = writeln!(peripherals.display, "--POSITIONS:\n{position_packet:?}");
-        
+
         let velocity_packet = MotorPacket {
             magic: ENCODER_VELOCITY_MAGIC,
             front_left: front_lefts[0]
@@ -249,21 +275,26 @@ async fn main(mut peripherals: Peripherals) {
             back_right: back_rights[0]
                 .velocity()
                 .map_or(0f32, rpm_to_wheel_rad_per_sec),
-            intake1: intake1
-                .velocity()
-                .map_or(0f32, rpm_to_intake_rad_per_sec),
-            intake2: intake2
-                .velocity()
-                .map_or(0f32, rpm_to_intake_rad_per_sec),
-            intake3: intake3
-                .velocity()
-                .map_or(0f32, rpm_to_intake_rad_per_sec),
+            intake1: intake1.velocity().map_or(0f32, rpm_to_intake_rad_per_sec),
+            intake2: intake2.velocity().map_or(0f32, rpm_to_intake_rad_per_sec),
+            intake3: intake3.velocity().map_or(0f32, rpm_to_intake_rad_per_sec),
         };
-        
-        if send_velocity_packet(output, &velocity_packet).is_ok() {
+
+        if send_packet(output, &velocity_packet).is_ok() {
             // println!("Sent velocity packet: {:?}", velocity_packet);
         }
         let _ = write!(peripherals.display, "--VELOCITIES:\n{velocity_packet:?}");
 
+        if let Ok(Point2 { x, y }) = gps.position()
+            && let Ok(heading) = gps.heading()
+        {
+            let gps_packet = GpsPacket {
+                magic: GPS_MAGIC,
+                x,
+                y,
+                heading: heading.as_radians(),
+            };
+            let _ = send_packet(output, &gps_packet);
+        }
     }
 }
