@@ -68,6 +68,8 @@ In a pixi shell, run
 ```
 ros2 launch otto_bringup robot.launch.py lidar:=false serial_port:=COM3
 (Note: the port may differ based on computer or os i think)
+Windows: COMx
+Linux: /dev/ttyACM1 (needs confirmation)
 ```
 
 In a second shell, run
