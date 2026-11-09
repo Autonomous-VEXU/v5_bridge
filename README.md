@@ -56,3 +56,21 @@ pros upload --slot 1
 The bridge disables PROS's COBS stream encoding so the host sees raw packets, which means
 `pros terminal` will show packet bytes rather than text. The brain's screen shows the
 latest positions and velocities.
+
+
+### Running tele-op controls
+Build off main mqp repo
+```
+colcon build --merge-install --packages-select otto_hardware
+```
+
+In a pixi shell, run 
+```
+ros2 launch otto_bringup robot.launch.py lidar:=false serial_port:=COM3
+(Note: the port may differ based on computer or os i think)
+```
+
+In a second shell, run
+```
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -p stamped:=true
+```
